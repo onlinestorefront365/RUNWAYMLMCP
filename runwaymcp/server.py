@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from . import script as scriptlib
+from . import config, script as scriptlib
 from .client import KINDS, RunwayClient, RunwayError
 
 app = FastAPI(title="Runway GUI")
@@ -78,3 +78,36 @@ def get_job(jid: str):
     if jid not in JOBS:
         raise HTTPException(404)
     return JOBS[jid]
+
+
+class KeyIn(BaseModel):
+    key: str
+
+
+@app.get("/api/setup/status")
+def setup_status():
+    key = config.get_key()
+    return {"has_key": bool(key), "key_hint": f"…{key[-4:]}" if key else None,
+            "onboarded": config.load().get("onboarded", False)}
+
+
+@app.post("/api/setup/key")
+def setup_key(body: KeyIn):
+    """Validate the key against Runway before saving it."""
+    key = body.key.strip()
+    try:
+        org = client_factory_with_key(key).organization()
+    except RunwayError as e:
+        raise HTTPException(400, f"Runway rejected that key: {e}")
+    config.save({"api_key": key})
+    return {"ok": True, "credits": org.get("creditBalance")}
+
+
+@app.post("/api/setup/done")
+def setup_done():
+    config.save({"onboarded": True})
+    return {"ok": True}
+
+
+def client_factory_with_key(key: str):
+    return RunwayClient(key)

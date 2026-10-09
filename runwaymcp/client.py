@@ -30,9 +30,10 @@ class RunwayError(RuntimeError):
 class RunwayClient:
     def __init__(self, api_key: str | None = None, *, transport: httpx.BaseTransport | None = None,
                  poll_interval: float = 5.0):
-        key = api_key or os.environ.get("RUNWAYML_API_SECRET") or os.environ.get("RUNWAY_API_KEY")
+        from . import config
+        key = api_key or config.get_key()
         if not key:
-            raise RunwayError("Set RUNWAYML_API_SECRET (get a key at dev.runwayml.com)")
+            raise RunwayError("No API key. Run `runwaymcp serve` and finish setup, or set RUNWAYML_API_SECRET")
         self.poll_interval = poll_interval
         self.http = httpx.Client(
             base_url=BASE_URL,
@@ -45,6 +46,10 @@ class RunwayClient:
         if r.status_code >= 400:
             raise RunwayError(f"Runway API {r.status_code}: {r.text[:500]}")
         return r.json()
+
+    def organization(self) -> dict:
+        """Cheap authenticated call; used to validate a key and show credits."""
+        return self._check(self.http.get("/organization"))
 
     def submit(self, kind: str, params: dict) -> str:
         if kind not in KINDS:

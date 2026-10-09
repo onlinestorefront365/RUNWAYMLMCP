@@ -22,3 +22,9 @@ Each step has `type` (`text_to_image`, `image_to_video`, `text_to_video`, `video
 
 - `{{id.output}}` – first output URL of an earlier step; `{{id.outputs}}` – all; `{{id.task}}` – task id
 - `@path/to/file.png` – inline a local image as a data URI
+
+## First-run onboarding
+
+Opening the GUI for the first time shows a 4-step wizard: welcome → paste and verify a Runway API key
+(validated against Runway, saved to `~/.runwaymcp/config.json`, mode 0600) → pick a goal → run a first
+generation. Use "Re-run setup" in the header to reopen it. `RUNWAYML_API_SECRET` still takes precedence.

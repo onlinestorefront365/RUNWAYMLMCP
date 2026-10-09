@@ -15,8 +15,18 @@ textarea{font-family:ui-monospace,monospace;min-height:220px}
 button.go{margin-top:12px;background:var(--acc);color:#fff;border:0;border-radius:6px;padding:9px 18px;font:inherit;cursor:pointer}
 .job{margin-top:10px}.st{font-family:ui-monospace,monospace;font-size:13px}.err{color:#d33}
 img,video{max-width:100%;border-radius:8px;margin-top:6px}
-</style></head><body><main>
-<h1>Runway Studio</h1>
+
+#ob{position:fixed;inset:0;background:var(--bg);z-index:9;overflow:auto;display:none}
+#ob.on{display:block}.ob-in{max-width:560px;margin:0 auto;padding:32px 16px}
+.dots{display:flex;gap:6px;margin-bottom:24px}.dots i{flex:1;height:4px;border-radius:2px;background:var(--bd)}.dots i.on{background:var(--acc)}
+.ob-in h2{margin:0 0 8px}.ob-in p{color:var(--mut);line-height:1.5}
+.opts{display:grid;gap:8px;margin:14px 0}.opt{padding:12px;border:1px solid var(--bd);border-radius:8px;cursor:pointer;background:var(--card)}
+.opt.sel{border-color:var(--acc);outline:1px solid var(--acc)}.row{display:flex;gap:8px;justify-content:space-between;margin-top:18px}
+button.ghost{background:none;border:1px solid var(--bd);color:var(--fg);border-radius:6px;padding:9px 18px;font:inherit;cursor:pointer}
+a{color:var(--acc)}
+</style></head><body><div id="ob"><div class="ob-in"><div class="dots" id="dots"></div><div id="obbody"></div></div></div>
+<main>
+<h1>Runway Studio</h1><a href="#" id="redo" style="font-size:13px">Re-run setup</a>
 <div class="card">
  <div class="tabs"><button id="t1" class="on">Quick generate</button><button id="t2">Script</button></div>
  <div id="quick">
@@ -47,6 +57,7 @@ steps:
     duration: 5
 `;
 fetch('/api/kinds').then(r=>r.json()).then(k=>{$('type').innerHTML=Object.keys(k).map(x=>`<option>${x}</option>`).join('')});
+$('redo').onclick=e=>{e.preventDefault();ob.step=0;$('ob').className='on';obRender()};
 let mode='quick';
 function tab(m){mode=m;$('quick').hidden=m!='quick';$('scr').hidden=m=='quick';$('t1').className=m=='quick'?'on':'';$('t2').className=m=='quick'?'':'on'}
 $('t1').onclick=()=>tab('quick');$('t2').onclick=()=>tab('script');
@@ -67,4 +78,41 @@ async function poll(id){
   Object.entries(j.steps).map(([s,v])=>`<div class="st">${s}: ${v.status}${v.detail!=null&&v.status!='DONE'?' '+v.detail:''}</div>`+(v.output||[]).map(media).join('')).join('');
  if(j.status=='RUNNING')setTimeout(()=>poll(id),3000);
 }
+
+const GOALS={text_to_image:['Make images','Turn a text description into a picture','a cozy cabin in a snowy forest at dusk, cinematic lighting'],
+ text_to_video:['Make videos from text','Describe a scene and get a short clip','a paper boat drifting down a rain-soaked street, slow tracking shot'],
+ image_to_video:['Animate a photo','Bring a still image to life (you paste an image link)','gentle camera push-in, soft wind']};
+let ob={step:0,goal:'text_to_image'};
+const N=4;
+function obRender(){
+ $('dots').innerHTML=[...Array(N)].map((_,i)=>`<i class="${i<=ob.step?'on':''}"></i>`).join('');
+ const b=$('obbody'),back=ob.step>0?'<button class="ghost" id="obb">Back</button>':'<span></span>';
+ if(ob.step==0)b.innerHTML=`<h2>Welcome to Runway Studio</h2><p>This takes about two minutes. You'll connect your Runway account, pick what you want to make, and generate your first result. Nothing is charged by this app; generations use credits on your own Runway account.</p><div class="row"><span></span><button class="go" id="obn">Get started</button></div>`;
+ if(ob.step==1)b.innerHTML=`<h2>Connect your Runway account</h2><p>You need an API key.</p><ol style="color:var(--mut);line-height:1.6"><li>Go to <a href="https://dev.runwayml.com" target="_blank" rel="noopener">dev.runwayml.com</a> and sign in.</li><li>Create an organization, add credits, and create an API key.</li><li>Paste it below. It's saved only on this computer.</li></ol><input id="obkey" type="password" placeholder="key_…" autocomplete="off"><div id="obmsg" class="err" style="margin-top:8px"></div><div class="row">${back}<button class="go" id="obn">Verify &amp; continue</button></div>`;
+ if(ob.step==2)b.innerHTML=`<h2>What do you want to make first?</h2><div class="opts">${Object.entries(GOALS).map(([k,v])=>`<div class="opt ${k==ob.goal?'sel':''}" data-k="${k}"><b>${v[0]}</b><br><span style="color:var(--mut)">${v[1]}</span></div>`).join('')}</div><div class="row">${back}<button class="go" id="obn">Continue</button></div>`;
+ if(ob.step==3){const g=GOALS[ob.goal];b.innerHTML=`<h2>Try your first generation</h2><p>Edit the prompt, then run it. It usually takes under a minute for images and a few minutes for video.</p><textarea id="obp" style="min-height:80px;font-family:inherit">${g[2]}</textarea>${ob.goal=='image_to_video'?'<label>Image link (https://…)</label><input id="obimg">':''}<div id="obmsg" class="err" style="margin-top:8px"></div><div id="obres"></div><div class="row">${back}<button class="go" id="obn">Generate</button></div>`}
+ if(b.querySelector('#obb'))$('obb').onclick=()=>{ob.step--;obRender()};
+ b.querySelectorAll('.opt').forEach(o=>o.onclick=()=>{ob.goal=o.dataset.k;obRender()});
+ $('obn').onclick=obNext;
+}
+async function obNext(){
+ const m=$('obmsg');if(m)m.textContent='';
+ if(ob.step==1){
+  const r=await fetch('/api/setup/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:$('obkey').value})});
+  const j=await r.json();if(!r.ok){m.textContent=j.detail;return}
+  ob.credits=j.credits;
+ }
+ if(ob.step==3){
+  if($('obn').dataset.done){await fetch('/api/setup/done',{method:'POST'});$('ob').className='';return}
+  const params={promptText:$('obp').value};if(ob.goal=='image_to_video'){if(!$('obimg').value){m.textContent='Paste an image link first';return}params.promptImage=$('obimg').value}
+  $('obn').disabled=true;$('obn').textContent='Generating…';
+  const r=await fetch('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:ob.goal,params})});
+  const j=await r.json();if(!r.ok){m.textContent=j.detail;$('obn').disabled=false;$('obn').textContent='Generate';return}
+  for(;;){await new Promise(x=>setTimeout(x,3000));const jj=await (await fetch('/api/jobs/'+j.id)).json();
+   if(jj.status=='DONE'){$('obres').innerHTML=Object.values(jj.steps).flatMap(v=>v.output||[]).map(media).join('');$('obn').disabled=false;$('obn').textContent="Finish — open Studio";$('obn').dataset.done=1;return}
+   if(jj.status=='FAILED'){m.textContent=jj.error;$('obn').disabled=false;$('obn').textContent='Try again';return}}
+ }
+ ob.step++;obRender();
+}
+fetch('/api/setup/status').then(r=>r.json()).then(s=>{if(!s.has_key||!s.onboarded){ob.step=s.has_key?2:0;$('ob').className='on';obRender()}});
 </script></body></html>

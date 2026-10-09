@@ -57,3 +57,25 @@ def test_server():
         time.sleep(0.05)
     assert j["status"] == "DONE" and j["steps"]["b"]["output"]
     assert tc.post("/api/jobs", json={}).status_code == 400
+
+
+def test_onboarding(tmp_path, monkeypatch):
+    monkeypatch.setenv("RUNWAYMCP_HOME", str(tmp_path))
+    monkeypatch.delenv("RUNWAYML_API_SECRET", raising=False)
+    monkeypatch.delenv("RUNWAY_API_KEY", raising=False)
+    tc = TestClient(server.app)
+    assert tc.get("/api/setup/status").json() == {"has_key": False, "key_hint": None, "onboarded": False}
+
+    def mk(key):
+        ok = key == "good"
+        t = httpx.MockTransport(lambda r: httpx.Response(200 if ok else 401, json={"creditBalance": 500}))
+        return RunwayClient(key, transport=t)
+
+    monkeypatch.setattr(server, "client_factory_with_key", mk)
+    assert tc.post("/api/setup/key", json={"key": "bad"}).status_code == 400
+    assert tc.get("/api/setup/status").json()["has_key"] is False
+    r = tc.post("/api/setup/key", json={"key": " good "})
+    assert r.json() == {"ok": True, "credits": 500}
+    assert oct((tmp_path / "config.json").stat().st_mode)[-3:] == "600"
+    tc.post("/api/setup/done")
+    assert tc.get("/api/setup/status").json() == {"has_key": True, "key_hint": "…good", "onboarded": True}
