@@ -1,0 +1,19 @@
+[project]
+name = "runwaymcp"
+version = "0.1.0"
+description = "GUI and text-script runner for Runway's API"
+requires-python = ">=3.10"
+dependencies = ["fastapi", "uvicorn", "httpx", "pyyaml"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+runwaymcp = "runwaymcp.cli:main"
+
+[tool.setuptools]
+packages = ["runwaymcp"]
+package-data = { runwaymcp = ["static/*"] }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

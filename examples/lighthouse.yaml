@@ -1,0 +1,14 @@
+name: lighthouse
+steps:
+  - id: still
+    type: text_to_image
+    promptText: a lighthouse at dusk, cinematic
+    ratio: "1920:1080"
+  - id: clip
+    type: image_to_video
+    promptImage: "{{still.output}}"
+    promptText: waves crash, slow push in
+    duration: 5
+  - id: hd
+    type: video_upscale
+    videoUri: "{{clip.output}}"

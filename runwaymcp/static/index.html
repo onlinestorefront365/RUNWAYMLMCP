@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Runway Studio</title>
+<style>
+:root{--bg:#fff;--fg:#14171a;--mut:#667;--card:#f4f5f7;--acc:#2b59ff;--bd:#d9dce1}
+@media(prefers-color-scheme:dark){:root{--bg:#111316;--fg:#e8eaed;--mut:#9aa;--card:#1c1f24;--bd:#2d3138}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px system-ui,sans-serif}
+main{max-width:960px;margin:0 auto;padding:16px;display:grid;gap:16px}
+h1{font-size:20px;margin:0}.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px}
+.tabs button{background:none;border:0;color:var(--mut);padding:6px 12px;cursor:pointer;font:inherit}
+.tabs button.on{color:var(--fg);border-bottom:2px solid var(--acc)}
+label{display:block;margin:8px 0 3px;color:var(--mut);font-size:13px}
+input,select,textarea{width:100%;padding:8px;border:1px solid var(--bd);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit}
+textarea{font-family:ui-monospace,monospace;min-height:220px}
+button.go{margin-top:12px;background:var(--acc);color:#fff;border:0;border-radius:6px;padding:9px 18px;font:inherit;cursor:pointer}
+.job{margin-top:10px}.st{font-family:ui-monospace,monospace;font-size:13px}.err{color:#d33}
+img,video{max-width:100%;border-radius:8px;margin-top:6px}
+</style></head><body><main>
+<h1>Runway Studio</h1>
+<div class="card">
+ <div class="tabs"><button id="t1" class="on">Quick generate</button><button id="t2">Script</button></div>
+ <div id="quick">
+  <label>Type</label><select id="type"></select>
+  <label>Prompt</label><textarea id="prompt" style="min-height:70px;font-family:inherit"></textarea>
+  <label>Extra params (JSON, e.g. {"promptImage":"https://…","duration":10})</label>
+  <input id="extra" value="{}">
+ </div>
+ <div id="scr" hidden>
+  <label>YAML or JSON script — use {{id.output}} to chain steps</label>
+  <textarea id="script"></textarea>
+ </div>
+ <button class="go" id="go">Run</button> <span id="msg" class="err"></span>
+</div>
+<div id="jobs"></div>
+</main>
+<script>
+const $=i=>document.getElementById(i);
+$('script').value=`name: demo
+steps:
+  - id: still
+    type: text_to_image
+    promptText: a lighthouse at dusk, cinematic
+  - id: clip
+    type: image_to_video
+    promptImage: "{{still.output}}"
+    promptText: waves crash, slow push in
+    duration: 5
+`;
+fetch('/api/kinds').then(r=>r.json()).then(k=>{$('type').innerHTML=Object.keys(k).map(x=>`<option>${x}</option>`).join('')});
+let mode='quick';
+function tab(m){mode=m;$('quick').hidden=m!='quick';$('scr').hidden=m=='quick';$('t1').className=m=='quick'?'on':'';$('t2').className=m=='quick'?'':'on'}
+$('t1').onclick=()=>tab('quick');$('t2').onclick=()=>tab('script');
+$('go').onclick=async()=>{
+ $('msg').textContent='';let body;
+ try{body=mode=='quick'?{type:$('type').value,params:{...(($('prompt').value)?{promptText:$('prompt').value}:{}),...JSON.parse($('extra').value||'{}')}}:{script:$('script').value}}
+ catch(e){$('msg').textContent='Bad JSON: '+e.message;return}
+ const r=await fetch('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+ if(!r.ok){$('msg').textContent=(await r.json()).detail;return}
+ poll((await r.json()).id);
+};
+function media(u){return /\.(mp4|webm|mov)(\?|$)/i.test(u)?`<video src="${u}" controls></video>`:/\.(mp3|wav)(\?|$)/i.test(u)?`<audio src="${u}" controls></audio>`:`<img src="${u}">`}
+async function poll(id){
+ let el=document.getElementById('j'+id);
+ if(!el){el=document.createElement('div');el.id='j'+id;el.className='card job';$('jobs').prepend(el)}
+ const j=await (await fetch('/api/jobs/'+id)).json();
+ el.innerHTML=`<b>Job ${id}</b> — ${j.status}`+(j.error?` <span class="err">${j.error}</span>`:'')+
+  Object.entries(j.steps).map(([s,v])=>`<div class="st">${s}: ${v.status}${v.detail!=null&&v.status!='DONE'?' '+v.detail:''}</div>`+(v.output||[]).map(media).join('')).join('');
+ if(j.status=='RUNNING')setTimeout(()=>poll(id),3000);
+}
+</script></body></html>
